@@ -31,7 +31,7 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 /* ── Layout ──────────────────────────────────────────────────────────── */
 .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .main{display:grid;grid-template-columns:var(--lp-w) 1fr;height:calc(100vh - var(--nav-h));flex:1;min-height:0;overflow:hidden;transition:grid-template-columns .25s}
-#pg-report{display:none;flex:1;min-height:0;flex-direction:column;overflow-y:auto;overflow-x:hidden;background:var(--bg0)}
+#pg-report{display:none;flex:1;min-height:0;flex-direction:column;overflow:hidden;background:var(--bg0)}
 
 /* ── Navbar ──────────────────────────────────────────────────────────── */
 .nav{display:flex;align-items:center;padding:0 14px;gap:10px;
@@ -372,10 +372,13 @@ textarea.cpaths:focus{outline:none;border-color:var(--cyan)}
   letter-spacing:.4px;margin-top:1px}
 
 /* ── Report ───────────────────────────────────────────────────────────── */
-.repwrap{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:11px;max-width:1200px;margin:0 auto;width:100%}
+.repwrap{flex:1;overflow-y:auto;overflow-x:hidden;padding:20px;display:flex;flex-direction:column;gap:11px}
 .repbox{background:var(--bg1);border:1px solid var(--border);
   border-radius:var(--r2);padding:15px}
 .reptitle{font-size:17px;font-weight:700;margin-bottom:3px}
+.rep-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:3px}
+.rep-refresh{padding:6px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--bg2);color:var(--text2);cursor:pointer;font-size:11px;font-weight:600;transition:all .15s;display:flex;align-items:center;gap:5px}
+.rep-refresh:hover{background:var(--bg3);color:var(--text)}
 .repmeta{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px}
 .rmeta{display:flex;gap:4px;font-size:11px;color:var(--text2)}
 .rmeta .k{color:var(--text3)}
@@ -976,11 +979,12 @@ textarea.cpaths:focus{outline:none;border-color:var(--cyan)}
 
 </div><!-- /main -->
 <!-- Report page (inside .app, shown/hidden by navTab) -->
-<div id="pg-report" style="display:none">
+<div id="pg-report" style="display:none;flex-direction:column">
   <div class="repwrap" id="repContent">
     <div class="empty">
       <div class="empty-ico">📋</div>
-      <div class="empty-txt">Run a scan first to generate a report</div>
+      <div class="empty-txt">No scan data available</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">Run a scan from the Scanner tab to generate a report</div>
     </div>
   </div>
 </div>
@@ -1052,16 +1056,19 @@ function maybeCloseDrawer(){ if(window.innerWidth<=700) closeDrawer(); }
 // ── Navigation ─────────────────────────────────────────────────────────────
 function navTab(btn,page){
   document.querySelectorAll('.ntab').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
+  if(btn) btn.classList.add('on');
   const main = document.querySelector('.main');
   const rep  = $id('pg-report');
   if(page==='report'){
-    main.style.display = 'none';
-    rep.style.display  = 'flex';
+    if(main) main.style.display = 'none';
+    if(rep){
+      rep.style.display  = 'flex';
+      rep.style.flexDirection = 'column';
+    }
     buildReport();
   } else {
-    main.style.display = '';
-    rep.style.display  = 'none';
+    if(main) main.style.display = '';
+    if(rep) rep.style.display  = 'none';
   }
   maybeCloseDrawer();
 }
@@ -1223,6 +1230,9 @@ function scanDone(d){
   if(d.status==='completed'){
     const vc=S.results.filter(r=>['critical','high'].includes(r.severity)).length;
     toast(`Scan complete! ${S.results.length} findings (${vc} critical/high)`,'ok',5000);
+    // Auto-refresh report if report tab is visible
+    const rep=$id('pg-report');
+    if(rep && rep.style.display==='flex') buildReport();
   } else if(d.status==='failed'){
     toast('Scan failed — cannot connect to target','err',5000);
   } else if(d.status==='error'){
@@ -1518,8 +1528,15 @@ function expALL(fmt){
 // ── Report ─────────────────────────────────────────────────────────────────
 function buildReport(){
   const box=$id('repContent');
+  if(!box) return;
   if(!S.results.length){
-    box.innerHTML='<div class="empty"><div class="empty-ico">📋</div><div class="empty-txt">Run a scan first to generate a report</div></div>';
+    // Check if there's a history item we can load
+    const lastScan = S.history.length ? S.history[0] : null;
+    box.innerHTML=`<div class="empty">
+      <div class="empty-ico">📋</div>
+      <div class="empty-txt">No scan data available</div>
+      ${lastScan ? `<button class="repbtn pri" style="margin-top:12px" onclick="loadScanForReport('${lastScan.sid}')">📂 Load Last Scan (${esc(lastScan.tgt)})</button>` : '<div style="font-size:11px;color:var(--text3);margin-top:6px">Run a scan from the Scanner tab to generate a report</div>'}
+    </div>`;
     return;
   }
 
@@ -1573,7 +1590,10 @@ function buildReport(){
 
   box.innerHTML=`
   <div class="repbox">
-    <div class="reptitle">🛡 Security Assessment Report</div>
+    <div class="rep-header">
+      <div class="reptitle">🛡 Security Assessment Report</div>
+      <button class="rep-refresh" onclick="buildReport()" title="Refresh report">🔄 Refresh</button>
+    </div>
     <div class="repmeta">
       <div class="rmeta"><span class="k">Target:</span> ${esc(tgt)}</div>
       <div class="rmeta"><span class="k">Date:</span> ${new Date().toLocaleString()}</div>
@@ -1677,6 +1697,22 @@ function expReport(fmt){
   }
   toast('Report exported');
 }
+// ── Load scan for report (called from report empty state) ──────────────────
+async function loadScanForReport(sid){
+  if(!sid) return;
+  try{
+    const r=await fetch(`/api/scan/${sid}/status`);
+    const d=await r.json();
+    S.results=[]; S.endpoints=[]; S.params=[];
+    S.scanId=sid;
+    (d.results||[]).forEach(x=>ingestResult(x));
+    buildReport();
+    toast(`Loaded ${S.results.length} findings`,'ok');
+  }catch(e){
+    toast('Failed to load scan data','err');
+  }
+}
+
 // ── History ────────────────────────────────────────────────────────────────
 function addHist(sid,tgt){
   S.history.unshift({sid,tgt,status:'running',findings:0});
@@ -1732,6 +1768,9 @@ async function loadScan(sid){
       S.elTimer=setInterval(tickElapsed,1000);
     }
     toast('Scan loaded');
+    // If report tab is active, refresh it
+    const rep=$id('pg-report');
+    if(rep && rep.style.display==='flex') buildReport();
   }catch(e){ toast('Failed: '+e.message,'err'); }
 }
 
